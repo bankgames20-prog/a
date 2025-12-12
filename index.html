@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ball Jump Avoid Platforms</title>
+<style>
+body { margin:0; overflow:hidden; background:#0c0e18; font-family: Arial; }
+canvas { display:block; }
+#gameOverScreen {
+  display: none;
+  position: absolute;
+  top:0; left:0;
+  width:100%; height:100%;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index:10;
+}
+#gameOverScreen h1 { font-size:48px; margin-bottom:20px; }
+#gameOverScreen button {
+  padding: 10px 30px;
+  font-size: 24px;
+  cursor: pointer;
+  background:#4cc2ff;
+  border:none;
+  color:#fff;
+  border-radius:8px;
+}
+#scoreDisplay {
+  position: absolute;
+  top:20px;
+  left:20px;
+  color:white;
+  font-size: 24px;
+  z-index:5;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<div id="scoreDisplay">Score: 0</div>
+
+<div id="gameOverScreen">
+  <h1>You Lose!</h1>
+  <button id="restartBtn">Restart</button>
+</div>
+
+<audio id="loseSound">
+  <source src="https://freesound.org/data/previews/341/341695_62491-lq.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+/* --------------------------
+   BALL (อยู่กลางจอ Y)
+-------------------------- */
+let ball = {
+  x: canvas.width/2,
+  y: canvas.height/2,
+  radius: 14,
+  color: "#4cc2ff"
+};
+
+/* --------------------------
+   PLATFORMS
+-------------------------- */
+const PLATFORM_COUNT = 12;
+const PLATFORM_WIDTH = 130;
+const PLATFORM_HEIGHT = 14;
+let platformBaseSpeed = 3;
+let colors = ["#4cc3ff", "#ff4cc7"];
+let platforms = [];
+
+function createPlatforms() {
+  platforms = [];
+  let gap = canvas.height / PLATFORM_COUNT;
+  for(let i=0;i<PLATFORM_COUNT;i++){
+    platforms.push({
+      x: Math.random()*(canvas.width-PLATFORM_WIDTH),
+      y: i*gap,
+      w: PLATFORM_WIDTH,
+      h: PLATFORM_HEIGHT,
+      color: colors[Math.floor(Math.random()*colors.length)]
+    });
+  }
+}
+createPlatforms();
+
+/* --------------------------
+   CONTROLS
+-------------------------- */
+let moveLeft=false, moveRight=false;
+window.addEventListener("keydown", e=>{
+  if(e.key==="ArrowLeft") moveLeft=true;
+  if(e.key==="ArrowRight") moveRight=true;
+});
+window.addEventListener("keyup", e=>{
+  if(e.key==="ArrowLeft") moveLeft=false;
+  if(e.key==="ArrowRight") moveRight=false;
+});
+
+// TOUCH CONTROL
+window.addEventListener("touchstart", e=>{
+  let x=e.touches[0].clientX;
+  if(x<window.innerWidth/2) moveLeft=true;
+  else moveRight=true;
+});
+window.addEventListener("touchend", ()=>{
+  moveLeft=false; moveRight=false;
+});
+
+/* --------------------------
+   BACKGROUND
+-------------------------- */
+let backgroundY = 0;
+function drawBackground(speedMultiplier=0.5){
+  backgroundY += platformBaseSpeed * speedMultiplier; 
+  if(backgroundY >= canvas.height) backgroundY = 0;
+
+  let gradient = ctx.createLinearGradient(0, backgroundY, 0, canvas.height + backgroundY);
+  gradient.addColorStop(0, "#0c0e18");
+  gradient.addColorStop(1, "#1a1c29");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillRect(0, backgroundY - canvas.height, canvas.width, canvas.height);
+}
+
+/* --------------------------
+   SCORE
+-------------------------- */
+let score = 0;
+const scoreDisplay = document.getElementById("scoreDisplay");
+
+/* --------------------------
+   GAME OVER
+-------------------------- */
+const gameOverScreen = document.getElementById("gameOverScreen");
+const restartBtn = document.getElementById("restartBtn");
+const loseSound = document.getElementById("loseSound");
+
+function gameOver() {
+  loseSound.currentTime = 0;
+  loseSound.play();
+  gameOverScreen.style.display = "flex";
+}
+
+/* --------------------------
+   RESTART
+-------------------------- */
+restartBtn.addEventListener("click", ()=>{
+  createPlatforms();
+  score = 0;
+  scoreDisplay.textContent = "Score: 0";
+  gameOverScreen.style.display = "none";
+  gameLoop();
+});
+
+/* --------------------------
+   GAME LOOP
+-------------------------- */
+let animationId;
+function gameLoop(){
+  animationId = requestAnimationFrame(gameLoop);
+
+  // เพิ่มคะแนน
+  score += 1;
+  scoreDisplay.textContent = "Score: " + score;
+
+  // ปรับความเร็วพื้นหลังตามคะแนน
+  let bgSpeedMultiplier = 0.5 + score / 5000; // เลื่อนเร็วขึ้นเรื่อย ๆ
+
+  drawBackground(bgSpeedMultiplier);
+
+  // BALL MOVE LEFT/RIGHT
+  if(moveLeft) ball.x -= 6;
+  if(moveRight) ball.x += 6;
+  if(ball.x < -20) ball.x = canvas.width + 20;
+  if(ball.x > canvas.width + 20) ball.x = -20;
+
+  // DRAW BALL
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+  ctx.fillStyle = ball.color;
+  ctx.shadowColor = ball.color;
+  ctx.shadowBlur = 20;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // MOVE PLATFORMS DOWN
+  let platformSpeed = platformBaseSpeed + score / 5000; // แท่นเคลื่อนเร็วตามคะแนน
+  for(let p of platforms){
+    p.y += platformSpeed;
+
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+
+    // COLLISION → GAME OVER
+    if(ball.x + ball.radius > p.x &&
+       ball.x - ball.radius < p.x + p.w &&
+       ball.y + ball.radius > p.y &&
+       ball.y - ball.radius < p.y + p.h){
+      cancelAnimationFrame(animationId);
+      gameOver();
+      return;
+    }
+
+    // RECYCLE PLATFORM
+    if(p.y > canvas.height + 20){
+      p.y = -50;
+      p.x = Math.random()*(canvas.width - p.w);
+      p.color = colors[Math.floor(Math.random()*colors.length)];
+    }
+  }
+}
+
+// เริ่มเกม
+gameLoop();
+</script>
+</body>
+</html>
