@@ -2,10 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ball Jump Avoid Platforms</title>
+<title>Vertical Jump Full Version</title>
 <style>
-body { margin:0; overflow:hidden; background:#0c0e18; font-family: Arial; }
+body { margin:0; overflow:hidden; font-family: Arial; }
 canvas { display:block; }
+#scoreDisplay {
+  position: absolute;
+  top:20px;
+  left:20px;
+  color:white;
+  font-size: 24px;
+  z-index:5;
+}
 #gameOverScreen {
   display: none;
   position: absolute;
@@ -19,7 +27,7 @@ canvas { display:block; }
   align-items: center;
   z-index:10;
 }
-#gameOverScreen h1 { font-size:48px; margin-bottom:20px; }
+#gameOverScreen h1 { font-size:48px; margin-bottom:20px; text-align:center; }
 #gameOverScreen button {
   padding: 10px 30px;
   font-size: 24px;
@@ -28,14 +36,6 @@ canvas { display:block; }
   border:none;
   color:#fff;
   border-radius:8px;
-}
-#scoreDisplay {
-  position: absolute;
-  top:20px;
-  left:20px;
-  color:white;
-  font-size: 24px;
-  z-index:5;
 }
 </style>
 </head>
@@ -56,11 +56,16 @@ canvas { display:block; }
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
 /* --------------------------
-   BALL (อยู่กลางจอ Y)
+   BALL
 -------------------------- */
 let ball = {
   x: canvas.width/2,
@@ -97,25 +102,41 @@ createPlatforms();
 /* --------------------------
    CONTROLS
 -------------------------- */
-let moveLeft=false, moveRight=false;
-window.addEventListener("keydown", e=>{
-  if(e.key==="ArrowLeft") moveLeft=true;
-  if(e.key==="ArrowRight") moveRight=true;
-});
-window.addEventListener("keyup", e=>{
-  if(e.key==="ArrowLeft") moveLeft=false;
-  if(e.key==="ArrowRight") moveRight=false;
-});
+let isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-// TOUCH CONTROL
-window.addEventListener("touchstart", e=>{
-  let x=e.touches[0].clientX;
-  if(x<window.innerWidth/2) moveLeft=true;
-  else moveRight=true;
-});
-window.addEventListener("touchend", ()=>{
-  moveLeft=false; moveRight=false;
-});
+let moveLeft=false, moveRight=false;
+let targetX = ball.x;
+let targetY = ball.y;
+
+// Desktop → Arrow keys (กดค้าง)
+if(!isMobile){
+  window.addEventListener("keydown", e=>{
+    if(e.key==="ArrowLeft") moveLeft=true;
+    if(e.key==="ArrowRight") moveRight=true;
+  });
+  window.addEventListener("keyup", e=>{
+    if(e.key==="ArrowLeft") moveLeft=false;
+    if(e.key==="ArrowRight") moveRight=false;
+  });
+}
+
+// Mobile → Touch + Tilt
+if(isMobile){
+  window.addEventListener("touchstart", e=>{
+    targetX = e.touches[0].clientX;
+    targetY = e.touches[0].clientY;
+  });
+  window.addEventListener("touchmove", e=>{
+    targetX = e.touches[0].clientX;
+    targetY = e.touches[0].clientY;
+  });
+  window.addEventListener("deviceorientation", e=>{
+    let tiltX = e.gamma || 0;
+    let tiltY = e.beta || 0;
+    targetX += tiltX * 0.5;
+    targetY += tiltY * 0.5;
+  });
+}
 
 /* --------------------------
    BACKGROUND
@@ -159,6 +180,8 @@ function gameOver() {
 restartBtn.addEventListener("click", ()=>{
   createPlatforms();
   score = 0;
+  ball.x = canvas.width/2;
+  ball.y = canvas.height/2;
   scoreDisplay.textContent = "Score: 0";
   gameOverScreen.style.display = "none";
   gameLoop();
@@ -175,14 +198,23 @@ function gameLoop(){
   score += 1;
   scoreDisplay.textContent = "Score: " + score;
 
-  // ปรับความเร็วพื้นหลังตามคะแนน
-  let bgSpeedMultiplier = 0.5 + score / 5000; // เลื่อนเร็วขึ้นเรื่อย ๆ
+  // ความเร็วเพิ่มตามคะแนน
+  let speedMultiplier = 1 + score / 2000; // เพิ่มความเร็วตาม score
 
-  drawBackground(bgSpeedMultiplier);
+  // พื้นหลังและแท่น
+  drawBackground(speedMultiplier * 0.5);
+  let platformSpeed = platformBaseSpeed * speedMultiplier;
 
-  // BALL MOVE LEFT/RIGHT
-  if(moveLeft) ball.x -= 6;
-  if(moveRight) ball.x += 6;
+  // BALL MOVE
+  if(!isMobile){
+    if(moveLeft) ball.x -= 6 * speedMultiplier;
+    if(moveRight) ball.x += 6 * speedMultiplier;
+  } else {
+    ball.x += (targetX - ball.x) * 0.1 * speedMultiplier;
+    ball.y += (targetY - ball.y) * 0.1 * speedMultiplier;
+  }
+
+  // WRAP LEFT/RIGHT
   if(ball.x < -20) ball.x = canvas.width + 20;
   if(ball.x > canvas.width + 20) ball.x = -20;
 
@@ -196,7 +228,6 @@ function gameLoop(){
   ctx.shadowBlur = 0;
 
   // MOVE PLATFORMS DOWN
-  let platformSpeed = platformBaseSpeed + score / 5000; // แท่นเคลื่อนเร็วตามคะแนน
   for(let p of platforms){
     p.y += platformSpeed;
 
